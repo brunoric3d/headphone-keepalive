@@ -1,0 +1,6 @@
+# Versoes travadas de proposito: um build reproduz o anterior, e uma versao
+# comprometida de dependencia nao entra sozinha no executavel distribuido.
+# Para atualizar, suba uma de cada vez e rode os builds.
+sounddevice==0.5.6
+pystray==0.19.5
+Pillow==12.3.0

@@ -1,0 +1,12 @@
+# Normaliza as quebras de linha para o repo nao quebrar entre sistemas.
+* text=auto eol=lf
+
+# O .bat so funciona com CRLF no Windows.
+*.bat text eol=crlf
+
+# Binarios ficam intocados.
+*.png binary
+*.ico binary
+*.icns binary
+*.wav binary
+*.s16 binary

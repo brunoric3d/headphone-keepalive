@@ -1,0 +1,6 @@
+# Dependencias so para gerar os executaveis. Para rodar o app basta o
+# requirements.txt. O numpy exige Python 3.11 ou mais novo, entao a maquina
+# que compila precisa ser 3.11+, mesmo o app rodando a partir de 3.10.
+-r requirements.txt
+numpy==2.4.6
+pyinstaller==6.22.2
