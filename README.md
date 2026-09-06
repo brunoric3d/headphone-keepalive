@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/keepalive_logo.png" width="140" alt="Headphone Keep Alive">
+  <img src="assets/keepalive_logo.png" width="340" alt="Headphone Keep Alive">
 </p>
 
 <h1 align="center">Headphone Keep Alive</h1>
