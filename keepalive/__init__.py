@@ -2,4 +2,4 @@
 
 APP_NAME = "Headphone Keep Alive"
 APP_ID = "headphone-keepalive"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
