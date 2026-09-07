@@ -53,9 +53,27 @@ def main(argv=None) -> int:
     parser.add_argument("--list-devices", action="store_true", help="list audio outputs and exit")
     parser.add_argument("--all-apis", action="store_true", help="with --list-devices, show every audio API")
     parser.add_argument("--list-languages", action="store_true", help="list available interface languages and exit")
+    parser.add_argument("--system-volume", action="store_true", help="show what the app reads from the system volume and exit")
     parser.add_argument("--licenses", action="store_true", help="write the third party licence texts next to this program and exit")
     parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
     args = parser.parse_args(argv)
+
+    if args.system_volume:
+        from . import syslevel
+
+        result = syslevel.query()
+        if result is None:
+            print("could not read the system volume on this platform")
+            print("the app will not compensate, which is the safe default")
+            return 1
+        attenuation, scalar, muted = result
+        print(f"attenuation : {attenuation:+.1f} dB   (0 dB means the slider is at maximum)")
+        print(f"slider      : {scalar * 100:.0f} %" if scalar is not None else "slider      : unknown")
+        print(f"muted       : {muted}")
+        print()
+        print("with the default -54 dBFS preset the app would play at "
+              f"{min(-54.0 - attenuation, -30.0):.0f} dBFS")
+        return 0
 
     if args.licenses:
         return _write_licenses()

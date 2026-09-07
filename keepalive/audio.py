@@ -16,10 +16,16 @@ from typing import Callable, Dict, List, Optional
 
 import sounddevice as sd
 
-from . import signals
+from . import signals, syslevel
 
 BLOCKSIZE = 2048
-WATCHDOG_SECONDS = 5.0
+WATCHDOG_SECONDS = 2.0
+# teto absoluto da compensacao: e o mesmo nivel do preset mais alto do app,
+# entao compensar nunca deixa o som mais forte do que o usuario ja podia
+# escolher na mao. isso limita o susto se a leitura do volume vier errada
+MAX_LEVEL_DB = -30.0
+# so re-renderiza quando o volume do sistema mexeu mais que isso
+LEVEL_EPSILON_DB = 1.0
 # so usado onde nao da para perguntar ao sistema se a lista de saidas mudou
 FALLBACK_POLL_SECONDS = 60.0
 FALLBACK_RATES = (48000, 44100, 32000, 22050)
@@ -196,6 +202,10 @@ class AudioEngine:
         self._status = ("stopped", "")
         self._active_device = None
 
+        self._attenuation = 0.0
+        self._clamped = False
+        self._tick = 0
+
         self._fingerprint = device_fingerprint()
         self._last_poll = time.monotonic()
 
@@ -225,6 +235,42 @@ class AudioEngine:
         if state == "error":
             return f"no audio output ({detail})"
         return "stopped"
+
+    @property
+    def compensation(self) -> tuple:
+        """(atenuacao_do_sistema_db, nivel_efetivo_db, bateu_no_teto)."""
+        with self._lock:
+            return self._attenuation, self._target_level_db(), self._clamped
+
+    def _target_level_db(self) -> float:
+        """Nivel digital a usar, ja compensando o volume do sistema."""
+        base = float(self.config.get("level_db"))
+        if not self.config.get("compensate_system"):
+            self._clamped = False
+            return base
+        wanted = base - self._attenuation  # atenuacao e negativa
+        capped = min(wanted, MAX_LEVEL_DB)
+        self._clamped = capped < wanted - 0.01
+        return capped
+
+    def _read_system_level(self) -> bool:
+        """Le o volume do sistema. True quando mudou o bastante para re-render."""
+        if not self.config.get("compensate_system"):
+            if self._attenuation != 0.0:
+                self._attenuation = 0.0
+                return True
+            return False
+        value = syslevel.attenuation_db()
+        if value is None:
+            # sem leitura confiavel a gente nao inventa ganho
+            if self._attenuation != 0.0:
+                self._attenuation = 0.0
+                return True
+            return False
+        if abs(value - self._attenuation) < LEVEL_EPSILON_DB:
+            return False
+        self._attenuation = value
+        return True
 
     @property
     def active_device(self) -> Optional[str]:
@@ -271,7 +317,7 @@ class AudioEngine:
             str(self.config.get("sound")),
             int(samplerate),
             float(self.config.get("pulse_interval") or 20.0),
-            float(self.config.get("level_db")),
+            round(self._target_level_db(), 2),
             int(channels),
         )
         if key == self._render_key and not force:
@@ -369,6 +415,7 @@ class AudioEngine:
     def start(self) -> None:
         with self._lock:
             self._running = True
+        self._read_system_level()
         self._close_stream()
         self._open_stream()
         self._fingerprint = device_fingerprint()
@@ -429,6 +476,13 @@ class AudioEngine:
             try:
                 if not self._running:
                     continue
+
+                self._tick += 1
+                # no Windows a leitura e uma chamada de API barata, nos outros
+                # sistemas envolve processo externo, entao vai mais devagar
+                cadence = 1 if sys.platform == "win32" else 3
+                if self._tick % cadence == 0 and self._read_system_level():
+                    self.apply_settings()
 
                 stream = self._stream
                 if stream is None or not stream.active:

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The signal now compensates for the system volume. A low system volume used to
+  drag the keepalive down with it until the headphones read it as silence. The
+  compensated level is capped at the app's own loudest preset
+
 - Noise is rendered at build time and shipped as raw PCM, so NumPy is no longer
   a runtime dependency. The Linux executable went from 36.3 MB to 12.6 MB
 - Reopening the audio stream no longer rebuilds the buffer, which removed a

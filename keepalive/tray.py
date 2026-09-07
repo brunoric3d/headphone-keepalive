@@ -35,10 +35,16 @@ class TrayApp:
 
     def _level_label(self) -> str:
         current = float(self.config.get("level_db"))
+        nome = f"{current:.0f} dB"
         for text_key, value in cfg.LEVEL_PRESETS:
             if abs(value - current) < 0.01:
-                return f"{self.t(text_key)} ({value:.0f} dB)"
-        return f"{current:.0f} dB"
+                nome = f"{self.t(text_key)} ({value:.0f} dB)"
+                break
+        atenuacao, efetivo, no_teto = self.engine.compensation
+        if abs(efetivo - current) >= 0.5:
+            # mostra para onde o nivel foi depois de compensar o sistema
+            nome += f" -> {efetivo:.0f} dB" + (" (max)" if no_teto else "")
+        return nome
 
     def _status_line(self) -> str:
         state, detail = self.engine.status
@@ -135,6 +141,11 @@ class TrayApp:
     def _toggle_all_apis(self, _icon=None, _item=None) -> None:
         self.config.set("show_all_apis", not bool(self.config.get("show_all_apis")))
         self._rebuild()
+
+    def _toggle_compensate(self, _icon=None, _item=None) -> None:
+        self.config.set("compensate_system", not bool(self.config.get("compensate_system")))
+        self.engine.apply_settings()
+        self._refresh()
 
     def _toggle_follow(self, _icon=None, _item=None) -> None:
         self.config.set("follow_default", not bool(self.config.get("follow_default")))
@@ -262,6 +273,11 @@ class TrayApp:
             MenuItem(self.t("menu_pulse"), Menu(*pulse_items)),
             MenuItem(self.t("menu_output"), self._device_menu()),
             Menu.SEPARATOR,
+            MenuItem(
+                self.t("menu_compensate"),
+                self._toggle_compensate,
+                checked=lambda item: bool(self.config.get("compensate_system")),
+            ),
             MenuItem(
                 self.t("menu_follow_default"),
                 self._toggle_follow,

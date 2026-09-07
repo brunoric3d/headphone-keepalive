@@ -73,6 +73,16 @@ Comece no ruído rosa. Os tons puros só valem a pena se você quiser silêncio 
 
 **Volume** vai de -66 dBFS até -30 dBFS. O padrão é -54 dBFS, que é inaudível em uso normal e ainda bem acima do silêncio digital. Se o fone continuar desligando, suba um passo por vez.
 
+**Compensar volume baixo do sistema** mantém o sinal no mesmo nível no fone,
+não importa onde esteja o volume do sistema. O app lê quanto o sistema está
+atenuando a saída e sobe o nível digital na mesma medida, então um sistema em
+10 por cento deixa de transformar o sinal em algo que o fone lê como silêncio.
+O nível compensado tem teto de -30 dBFS, que é exatamente o preset mais alto do
+próprio app, então compensar nunca deixa o som mais forte do que um nível que
+você já podia escolher na mão. Passando desse teto o menu mostra `(max)` e o
+sinal fica mais fraco do que o pretendido. Quando não dá para ler o volume do
+sistema, o app não compensa nada.
+
 **Saída de áudio** deixa você seguir o padrão do sistema ou fixar um dispositivo. O Windows expõe o mesmo fone uma vez para cada API de áudio (MME, DirectSound, WASAPI e WDM-KS), então a lista crua vem cheia de repetição, e no MME os nomes ainda chegam cortados em 31 caracteres. O app mostra só a API preferida de cada sistema, WASAPI no Windows, Core Audio no macOS, PulseAudio ou PipeWire no Linux, e tira nomes repetidos dentro da mesma API. Ligue "Mostrar todas as APIs de áudio" se quiser forçar um caminho específico.
 
 **Seguir a saída padrão do sistema** leva o som para a saída que o sistema estiver usando. No Windows o app pergunta ao sistema quantas saídas existem, o que não custa nada e não encosta no áudio, e só reconecta quando um dispositivo realmente entra ou sai. No macOS e no Linux não existe um sinal igualmente barato, então ele cai para uma checagem a cada 60 segundos. Nos dois casos o stream só é reaberto quando algo mudou de verdade. Desligue se você fixou um dispositivo.
@@ -91,6 +101,7 @@ Comece no ruído rosa. Os tons puros só valem a pena se você quiser silêncio 
 python run.py --list-devices     # saídas de áudio, sem repetição
 python run.py --list-devices --all-apis
 python run.py --list-languages
+python run.py --system-volume    # mostra o que o app lê do volume do sistema
 python run.py --licenses         # grava em disco os textos de licença de terceiros
 python run.py --headless         # sem ícone, útil para testar
 python run.py --version

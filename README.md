@@ -73,6 +73,16 @@ Start with pink noise. The pure tones are only worth it if you want absolute sil
 
 **Volume** goes from -66 dBFS to -30 dBFS. The default is -54 dBFS, which is inaudible at normal listening levels and still far above digital silence. If your headphones keep shutting off, move up one step at a time.
 
+**Compensate low system volume** keeps the signal at the same level at the
+headphones no matter where the system volume sits. The app reads how much the
+system is attenuating the output and raises the digital level by the same
+amount, so a system at 10 percent no longer turns the keepalive into something
+the headphones read as silence. The compensated level is capped at -30 dBFS,
+which is exactly the app's own loudest preset, so compensating can never make it
+louder than a level you could already pick by hand. Past that cap the menu shows
+`(max)` and the signal is quieter than intended. When the system volume cannot
+be read, the app does not compensate at all.
+
 **Audio output** lets you follow the system default or pin one device. Windows exposes the same headphones once per audio API (MME, DirectSound, WASAPI, WDM-KS), so the raw device list is full of duplicates, and MME even truncates names at 31 characters. The app shows only the preferred API for each system, WASAPI on Windows, Core Audio on macOS, PulseAudio or PipeWire on Linux, and drops repeated names inside the same API. Turn on "Show all audio APIs" if you want to force a specific path.
 
 **Follow system default output** moves the sound to whatever the system is using now. On Windows the app asks the system how many outputs exist, which costs nothing and does not touch the audio, and only reconnects when a device actually appears or disappears. On macOS and Linux there is no equally cheap signal, so it falls back to a check every 60 seconds. Either way the stream is reopened only when something really changed. Turn it off if you pinned a device.
@@ -91,6 +101,7 @@ Start with pink noise. The pure tones are only worth it if you want absolute sil
 python run.py --list-devices     # audio outputs, deduplicated
 python run.py --list-devices --all-apis
 python run.py --list-languages
+python run.py --system-volume    # show what the app reads from the system volume
 python run.py --licenses         # write the third party licence texts to disk
 python run.py --headless         # no tray icon, useful for testing
 python run.py --version

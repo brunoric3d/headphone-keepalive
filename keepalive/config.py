@@ -34,6 +34,9 @@ DEFAULTS: Dict[str, Any] = {
     "autostart": False,
     # auto segue o idioma do sistema; ou um codigo como en, pt, es
     "language": "auto",
+    # sobe o sinal quando o volume do sistema esta baixo, para o fone nao achar
+    # que e silencio. limitado ao nivel do preset mais alto do app
+    "compensate_system": True,
 }
 
 # chave de traducao e nivel em dBFS
