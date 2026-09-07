@@ -19,13 +19,19 @@ import sounddevice as sd
 from . import signals, syslevel
 
 BLOCKSIZE = 2048
-WATCHDOG_SECONDS = 2.0
-# teto absoluto da compensacao: e o mesmo nivel do preset mais alto do app,
-# entao compensar nunca deixa o som mais forte do que o usuario ja podia
-# escolher na mao. isso limita o susto se a leitura do volume vier errada
-MAX_LEVEL_DB = -30.0
+WATCHDOG_SECONDS = 1.0
+# teto absoluto da compensacao. fica 6 dB acima do preset mais alto do app,
+# o suficiente para a compensacao ainda valer com o volume do sistema perto de
+# 10 por cento. e tambem o limite do susto se a leitura do volume vier errada:
+# no pior caso o app toca a -24 dBFS por um segundo, ate a proxima leitura
+MAX_LEVEL_DB = -24.0
 # so re-renderiza quando o volume do sistema mexeu mais que isso
 LEVEL_EPSILON_DB = 1.0
+# de quanto em quanto tempo o volume do sistema e lido. no Windows e uma
+# chamada de API barata e da para ir a cada segundo, o que encurta a janela em
+# que o som fica mais alto do que devia depois de subir o volume. no macOS e no
+# Linux a leitura roda um processo externo, entao vai bem mais devagar
+VOLUME_POLL_SECONDS = 1.0 if sys.platform == "win32" else 6.0
 # so usado onde nao da para perguntar ao sistema se a lista de saidas mudou
 FALLBACK_POLL_SECONDS = 60.0
 FALLBACK_RATES = (48000, 44100, 32000, 22050)
@@ -204,10 +210,10 @@ class AudioEngine:
 
         self._attenuation = 0.0
         self._clamped = False
-        self._tick = 0
 
         self._fingerprint = device_fingerprint()
         self._last_poll = time.monotonic()
+        self._last_level_read = 0.0
 
         self._stop_event = threading.Event()
         self._watchdog = threading.Thread(target=self._watch, name="keepalive-watchdog", daemon=True)
@@ -420,6 +426,7 @@ class AudioEngine:
         self._open_stream()
         self._fingerprint = device_fingerprint()
         self._last_poll = time.monotonic()
+        self._last_level_read = self._last_poll
         self._notify()
 
     def stop(self) -> None:
@@ -445,6 +452,7 @@ class AudioEngine:
         self._open_stream()
         self._fingerprint = device_fingerprint()
         self._last_poll = time.monotonic()
+        self._last_level_read = self._last_poll
         self._notify()
 
     def rescan(self) -> None:
@@ -456,6 +464,7 @@ class AudioEngine:
             self._open_stream()
         self._fingerprint = device_fingerprint()
         self._last_poll = time.monotonic()
+        self._last_level_read = self._last_poll
         self._notify()
 
     def set_level_db(self, db: float) -> None:
@@ -477,12 +486,11 @@ class AudioEngine:
                 if not self._running:
                     continue
 
-                self._tick += 1
-                # no Windows a leitura e uma chamada de API barata, nos outros
-                # sistemas envolve processo externo, entao vai mais devagar
-                cadence = 1 if sys.platform == "win32" else 3
-                if self._tick % cadence == 0 and self._read_system_level():
-                    self.apply_settings()
+                agora = time.monotonic()
+                if agora - self._last_level_read >= VOLUME_POLL_SECONDS:
+                    self._last_level_read = agora
+                    if self._read_system_level():
+                        self.apply_settings()
 
                 stream = self._stream
                 if stream is None or not stream.active:

@@ -75,8 +75,12 @@ def main(argv=None) -> int:
         print(f"slider      : {scalar * 100:.0f} %" if scalar is not None else "slider      : unknown")
         print(f"muted       : {muted}")
         print()
-        print("with the default -54 dBFS preset the app would play at "
-              f"{min(-54.0 - attenuation, -30.0):.0f} dBFS")
+        from .audio import MAX_LEVEL_DB
+
+        wanted = -54.0 - attenuation
+        capped = min(wanted, MAX_LEVEL_DB)
+        note = f"   (capped at {MAX_LEVEL_DB:.0f} dBFS)" if capped < wanted - 0.01 else ""
+        print(f"with the default -54 dBFS preset the app would play at {capped:.0f} dBFS{note}")
         return 0
 
     if args.licenses:

@@ -77,11 +77,16 @@ Start with pink noise. The pure tones are only worth it if you want absolute sil
 headphones no matter where the system volume sits. The app reads how much the
 system is attenuating the output and raises the digital level by the same
 amount, so a system at 10 percent no longer turns the keepalive into something
-the headphones read as silence. The compensated level is capped at -30 dBFS,
-which is exactly the app's own loudest preset, so compensating can never make it
-louder than a level you could already pick by hand. Past that cap the menu shows
+the headphones read as silence. The compensated level is capped at -24 dBFS,
+6 dB above the app's own loudest preset, which is enough to keep compensating
+down to a system volume of about 10 percent. Past that cap the menu shows
 `(max)` and the signal is quieter than intended. When the system volume cannot
 be read, the app does not compensate at all.
+
+The cap also bounds the worst case. If you raise the system volume while the
+app is compensating for a low one, the signal is louder than it should be until
+the next reading. On Windows that reading happens every second; on macOS and
+Linux it needs an external process, so it happens every six.
 
 **Audio output** lets you follow the system default or pin one device. Windows exposes the same headphones once per audio API (MME, DirectSound, WASAPI, WDM-KS), so the raw device list is full of duplicates, and MME even truncates names at 31 characters. The app shows only the preferred API for each system, WASAPI on Windows, Core Audio on macOS, PulseAudio or PipeWire on Linux, and drops repeated names inside the same API. Turn on "Show all audio APIs" if you want to force a specific path.
 
@@ -119,7 +124,7 @@ The noise is rendered at build time by `tools/make_audio.py`, which uses NumPy t
 
 At runtime the app builds one buffer with the volume applied and the channels interleaved, and the audio callback does nothing but copy bytes out of it. Nothing is computed or allocated in the realtime path. Changing the sound, the volume or the pulse interval swaps that buffer in place, so those settings take effect without touching the stream and without a single dropout.
 
-A watchdog checks the stream every 5 seconds and reopens it if it died, because the headphones dropped or the driver killed it. Reopening no longer rebuilds the buffer, so the silence it costs went from about 400 ms to under 10 ms. Sample rate and channel count are negotiated with the driver, falling back through 44100, 32000 and 22050 if needed. The noise files are rendered at 48 kHz; playing them at another rate shifts the spectrum slightly, which for noise makes no audible difference.
+A watchdog checks the stream every second and reopens it if it died, because the headphones dropped or the driver killed it. Reopening no longer rebuilds the buffer, so the silence it costs went from about 400 ms to under 10 ms. Sample rate and channel count are negotiated with the driver, falling back through 44100, 32000 and 22050 if needed. The noise files are rendered at 48 kHz; playing them at another rate shifts the spectrum slightly, which for noise makes no audible difference.
 
 ## Building it yourself
 

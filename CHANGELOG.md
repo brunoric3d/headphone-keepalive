@@ -4,7 +4,13 @@
 
 - The signal now compensates for the system volume. A low system volume used to
   drag the keepalive down with it until the headphones read it as silence. The
-  compensated level is capped at the app's own loudest preset
+  compensated level is capped at -24 dBFS, which keeps the compensation working
+  down to a system volume of about 10 percent
+- Some Windows endpoints report a fake dB range, answering with a number near
+  zero no matter where the slider sits. The attenuation is now derived from the
+  volume scalar whenever the reported dB disagrees with it
+- The system volume is read every second on Windows, which shortens the window
+  where the signal is louder than intended after the volume goes back up
 
 - Noise is rendered at build time and shipped as raw PCM, so NumPy is no longer
   a runtime dependency. The Linux executable went from 36.3 MB to 12.6 MB

@@ -77,11 +77,16 @@ Comece no ruído rosa. Os tons puros só valem a pena se você quiser silêncio 
 não importa onde esteja o volume do sistema. O app lê quanto o sistema está
 atenuando a saída e sobe o nível digital na mesma medida, então um sistema em
 10 por cento deixa de transformar o sinal em algo que o fone lê como silêncio.
-O nível compensado tem teto de -30 dBFS, que é exatamente o preset mais alto do
-próprio app, então compensar nunca deixa o som mais forte do que um nível que
-você já podia escolher na mão. Passando desse teto o menu mostra `(max)` e o
+O nível compensado tem teto de -24 dBFS, 6 dB acima do preset mais alto do
+próprio app, o que basta para a compensação continuar valendo até um volume de
+sistema perto de 10 por cento. Passando desse teto o menu mostra `(max)` e o
 sinal fica mais fraco do que o pretendido. Quando não dá para ler o volume do
 sistema, o app não compensa nada.
+
+O teto também limita o pior caso. Se você subir o volume do sistema enquanto o
+app está compensando um volume baixo, o sinal fica mais alto do que deveria até
+a próxima leitura. No Windows essa leitura acontece a cada segundo. No macOS e
+no Linux ela precisa de um processo externo, então acontece a cada seis.
 
 **Saída de áudio** deixa você seguir o padrão do sistema ou fixar um dispositivo. O Windows expõe o mesmo fone uma vez para cada API de áudio (MME, DirectSound, WASAPI e WDM-KS), então a lista crua vem cheia de repetição, e no MME os nomes ainda chegam cortados em 31 caracteres. O app mostra só a API preferida de cada sistema, WASAPI no Windows, Core Audio no macOS, PulseAudio ou PipeWire no Linux, e tira nomes repetidos dentro da mesma API. Ligue "Mostrar todas as APIs de áudio" se quiser forçar um caminho específico.
 
@@ -119,7 +124,7 @@ O ruído é renderizado na hora do build pelo `tools/make_audio.py`, que usa Num
 
 Em execução o app monta um único buffer com o volume aplicado e os canais montados, e o callback de áudio não faz nada além de copiar bytes dele. Nada é calculado nem alocado no caminho de tempo real. Trocar o som, o volume ou o intervalo do pulso substitui esse buffer no lugar, então essas mudanças valem na hora, sem encostar no stream e sem nenhum corte no áudio.
 
-Um watchdog checa o stream a cada 5 segundos e reabre se ele morreu, porque o fone caiu ou o driver derrubou. Reabrir não reconstrói mais o buffer, então o silêncio que isso custava caiu de uns 400 ms para menos de 10 ms. A taxa de amostragem e o número de canais são negociados com o driver, com queda para 44100, 32000 e 22050 se a placa recusar. Os arquivos de ruído são de 48 kHz; tocá-los em outra taxa desloca o espectro um pouco, o que para ruído não muda nada que dê para ouvir.
+Um watchdog checa o stream a cada segundo e reabre se ele morreu, porque o fone caiu ou o driver derrubou. Reabrir não reconstrói mais o buffer, então o silêncio que isso custava caiu de uns 400 ms para menos de 10 ms. A taxa de amostragem e o número de canais são negociados com o driver, com queda para 44100, 32000 e 22050 se a placa recusar. Os arquivos de ruído são de 48 kHz; tocá-los em outra taxa desloca o espectro um pouco, o que para ruído não muda nada que dê para ouvir.
 
 ## Gerar os executáveis
 
