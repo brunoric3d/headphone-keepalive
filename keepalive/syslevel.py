@@ -35,66 +35,119 @@ _E_RENDER = 0
 _E_CONSOLE = 0
 
 
-def _win_query():
-    """Devolve (atenuacao_db, escala_0a1, mudo) do dispositivo de saida padrao."""
+def _win_query(debug=False):
+    """(atenuacao_db, escala_0a1, mudo) do dispositivo de saida padrao.
+
+    Fala com o Core Audio por COM cru. Cada passo reporta o HRESULT quando
+    debug=True, para dar para diagnosticar sem ter a maquina na mao.
+    """
     import ctypes
-    from ctypes import POINTER, byref, c_float, c_int, c_void_p
+    from ctypes import POINTER, byref, c_float, c_int, c_ubyte, c_ulong, c_ushort, c_void_p
+
+    passos = []
+
+    def registra(texto):
+        passos.append(texto)
+        if debug:
+            print(f"  {texto}")
 
     ole32 = ctypes.windll.ole32
 
     class GUID(ctypes.Structure):
-        _fields_ = [("Data1", ctypes.c_ulong), ("Data2", ctypes.c_ushort),
-                    ("Data3", ctypes.c_ushort), ("Data4", ctypes.c_ubyte * 8)]
+        _fields_ = [("Data1", c_ulong), ("Data2", c_ushort),
+                    ("Data3", c_ushort), ("Data4", c_ubyte * 8)]
 
-    def guid(text: str) -> GUID:
+    def guid(text):
         out = GUID()
-        if ole32.CLSIDFromString(ctypes.c_wchar_p(text), byref(out)) != 0:
-            raise OSError("CLSIDFromString falhou")
+        hr = ole32.CLSIDFromString(ctypes.c_wchar_p(text), byref(out))
+        if hr != 0:
+            raise OSError(f"CLSIDFromString({text}) = 0x{hr & 0xFFFFFFFF:08X}")
         return out
 
-    def call(interface, index, *args):
-        """Chama o metodo `index` da vtable de uma interface COM."""
-        vtable = ctypes.cast(interface, POINTER(POINTER(c_void_p)))[0]
-        prototype = ctypes.WINFUNCTYPE(ctypes.c_long, c_void_p, *[type(a) for a in args])
-        return prototype(vtable[index])(interface, *args)
+    def method(interface, index, *argtypes):
+        """Monta o ponteiro de funcao do metodo `index` da vtable.
 
-    ole32.CoInitialize(None)
+        Os tipos dos argumentos precisam ser declarados: um prototipo criado
+        com WINFUNCTYPE tem aridade fixa, ao contrario de uma funcao carregada
+        de DLL, que aceita qualquer coisa quando argtypes nao foi definido.
+        """
+        vtable = ctypes.cast(interface, POINTER(POINTER(c_void_p))).contents
+        address = vtable[index]
+        if not address:
+            raise OSError(f"vtable[{index}] vazia")
+        return ctypes.WINFUNCTYPE(ctypes.c_long, c_void_p, *argtypes)(address)
+
+    hr_init = ole32.CoInitialize(None)
+    registra(f"CoInitialize = 0x{hr_init & 0xFFFFFFFF:08X}")
+
     enumerator = c_void_p()
     device = c_void_p()
     volume = c_void_p()
     try:
-        if ole32.CoCreateInstance(byref(guid(_CLSID_MMDeviceEnumerator)), None, 1,
-                                  byref(guid(_IID_IMMDeviceEnumerator)),
-                                  byref(enumerator)) != 0:
+        hr = ole32.CoCreateInstance(
+            byref(guid(_CLSID_MMDeviceEnumerator)), None, 1,
+            byref(guid(_IID_IMMDeviceEnumerator)), byref(enumerator))
+        registra(f"CoCreateInstance(MMDeviceEnumerator) = 0x{hr & 0xFFFFFFFF:08X}")
+        if hr != 0 or not enumerator:
             return None
 
-        if call(enumerator, _VT_GET_DEFAULT_ENDPOINT,
-                c_int(_E_RENDER), c_int(_E_CONSOLE), byref(device)) != 0:
+        get_endpoint = method(enumerator, _VT_GET_DEFAULT_ENDPOINT,
+                              c_int, c_int, POINTER(c_void_p))
+        hr = get_endpoint(enumerator, _E_RENDER, _E_CONSOLE, byref(device))
+        registra(f"GetDefaultAudioEndpoint = 0x{hr & 0xFFFFFFFF:08X}")
+        if hr != 0 or not device:
             return None
 
-        if call(device, _VT_ACTIVATE, byref(guid(_IID_IAudioEndpointVolume)),
-                c_int(1), None, byref(volume)) != 0:
+        activate = method(device, _VT_ACTIVATE,
+                          POINTER(GUID), c_ulong, c_void_p, POINTER(c_void_p))
+        hr = activate(device, byref(guid(_IID_IAudioEndpointVolume)), 1, None, byref(volume))
+        registra(f"Activate(IAudioEndpointVolume) = 0x{hr & 0xFFFFFFFF:08X}")
+        if hr != 0 or not volume:
             return None
 
         level_db = c_float()
         scalar = c_float()
         muted = c_int()
-        ok_db = call(volume, _VT_GET_MASTER_LEVEL_DB, byref(level_db)) == 0
-        ok_scalar = call(volume, _VT_GET_MASTER_SCALAR, byref(scalar)) == 0
-        ok_mute = call(volume, _VT_GET_MUTE, byref(muted)) == 0
 
-        return (
-            float(level_db.value) if ok_db else None,
-            float(scalar.value) if ok_scalar else None,
-            bool(muted.value) if ok_mute else None,
-        )
+        hr = method(volume, _VT_GET_MASTER_LEVEL_DB, POINTER(c_float))(volume, byref(level_db))
+        registra(f"GetMasterVolumeLevel = 0x{hr & 0xFFFFFFFF:08X} -> {level_db.value:.2f} dB")
+        ok_db = hr == 0
+
+        hr = method(volume, _VT_GET_MASTER_SCALAR, POINTER(c_float))(volume, byref(scalar))
+        registra(f"GetMasterVolumeLevelScalar = 0x{hr & 0xFFFFFFFF:08X} -> {scalar.value:.3f}")
+        ok_scalar = hr == 0
+
+        hr = method(volume, _VT_GET_MUTE, POINTER(c_int))(volume, byref(muted))
+        registra(f"GetMute = 0x{hr & 0xFFFFFFFF:08X} -> {bool(muted.value)}")
+        ok_mute = hr == 0
+
+        if not ok_db and not ok_scalar:
+            return None
+
+        # se o dB falhou mas a escala veio, aproxima pela escala
+        db = float(level_db.value) if ok_db else (
+            20.0 * math.log10(scalar.value) if ok_scalar and scalar.value > 0 else -96.0)
+
+        return (db,
+                float(scalar.value) if ok_scalar else None,
+                bool(muted.value) if ok_mute else None)
+    except Exception as exc:
+        registra(f"excecao: {type(exc).__name__}: {exc}")
+        if debug:
+            import traceback
+            traceback.print_exc()
+        return None
     finally:
         for interface in (volume, device, enumerator):
             if interface:
                 try:
-                    call(interface, _VT_RELEASE)
+                    method(interface, _VT_RELEASE)(interface)
                 except Exception:
                     pass
+        try:
+            ole32.CoUninitialize()
+        except Exception:
+            pass
 
 
 # ----------------------------------------------------------------------- macos
@@ -145,11 +198,11 @@ def _linux_query():
 
 # ------------------------------------------------------------------------- api
 
-def query():
+def query(debug: bool = False):
     """(atenuacao_db, escala_0a1, mudo), ou None quando nao deu para ler."""
     try:
         if sys.platform == "win32":
-            result = _win_query()
+            result = _win_query(debug=debug)
         elif sys.platform == "darwin":
             result = _mac_query()
         else:

@@ -61,10 +61,14 @@ def main(argv=None) -> int:
     if args.system_volume:
         from . import syslevel
 
-        result = syslevel.query()
+        print(f"platform: {sys.platform}")
+        print("steps:")
+        result = syslevel.query(debug=True)
+        print()
         if result is None:
-            print("could not read the system volume on this platform")
+            print("could not read the system volume")
             print("the app will not compensate, which is the safe default")
+            print("send the steps above and this can be fixed")
             return 1
         attenuation, scalar, muted = result
         print(f"attenuation : {attenuation:+.1f} dB   (0 dB means the slider is at maximum)")
