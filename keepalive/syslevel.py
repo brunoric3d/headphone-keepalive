@@ -30,6 +30,8 @@ _VT_ACTIVATE = 3               # IMMDevice
 _VT_GET_MASTER_LEVEL_DB = 8    # IAudioEndpointVolume::GetMasterVolumeLevel
 _VT_GET_MASTER_SCALAR = 9      # IAudioEndpointVolume::GetMasterVolumeLevelScalar
 _VT_GET_MUTE = 15              # IAudioEndpointVolume::GetMute
+_VT_QUERY_HW_SUPPORT = 19      # IAudioEndpointVolume::QueryHardwareSupport
+_VT_GET_VOLUME_RANGE = 20      # IAudioEndpointVolume::GetVolumeRange
 
 _E_RENDER = 0
 _E_CONSOLE = 0
@@ -121,16 +123,41 @@ def _win_query(debug=False):
         registra(f"GetMute = 0x{hr & 0xFFFFFFFF:08X} -> {bool(muted.value)}")
         ok_mute = hr == 0
 
+        if debug:
+            # so para diagnostico: da para saber se a faixa de dB do dispositivo
+            # tem qualquer utilidade, ou se ele so sabe responder pela escala
+            lo, hi, step = c_float(), c_float(), c_float()
+            hr_range = method(volume, _VT_GET_VOLUME_RANGE,
+                              POINTER(c_float), POINTER(c_float), POINTER(c_float))(
+                volume, byref(lo), byref(hi), byref(step))
+            registra(f"GetVolumeRange = 0x{hr_range & 0xFFFFFFFF:08X} -> "
+                     f"min {lo.value:.2f} dB, max {hi.value:.2f} dB, passo {step.value:.2f} dB")
+            hw = c_ulong()
+            hr_hw = method(volume, _VT_QUERY_HW_SUPPORT, POINTER(c_ulong))(volume, byref(hw))
+            registra(f"QueryHardwareSupport = 0x{hr_hw & 0xFFFFFFFF:08X} -> 0x{hw.value:X}")
+
         if not ok_db and not ok_scalar:
             return None
 
-        # se o dB falhou mas a escala veio, aproxima pela escala
-        db = float(level_db.value) if ok_db else (
-            20.0 * math.log10(scalar.value) if ok_scalar and scalar.value > 0 else -96.0)
+        escala = float(scalar.value) if ok_scalar else None
+        db_bruto = float(level_db.value) if ok_db else None
 
-        return (db,
-                float(scalar.value) if ok_scalar else None,
-                bool(muted.value) if ok_mute else None)
+        # Varios dispositivos nao expoem faixa de dB de verdade e devolvem um
+        # numero perto de zero mesmo com o slider baixo. Quando o dB diz "sem
+        # atenuacao" e a escala diz o contrario, a escala ganha.
+        db_suspeito = (
+            db_bruto is None
+            or (db_bruto > -0.5 and escala is not None and escala < 0.95)
+        )
+        if db_suspeito and escala is not None:
+            db = 20.0 * math.log10(escala) if escala > 0 else -96.0
+            origem = "escala"
+        else:
+            db = db_bruto if db_bruto is not None else 0.0
+            origem = "dB do dispositivo"
+        registra(f"origem da atenuacao: {origem} -> {db:+.1f} dB")
+
+        return (db, escala, bool(muted.value) if ok_mute else None)
     except Exception as exc:
         registra(f"excecao: {type(exc).__name__}: {exc}")
         if debug:
